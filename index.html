@@ -1,0 +1,268 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Gra – Alfabet Polski</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@1/css/pico.min.css">
+  <style>
+    body {
+      text-align: center;
+      background: #121212;
+      color: #eee;
+      font-family: "Segoe UI", sans-serif;
+    }
+    #grid {
+      display: grid;
+      grid-template-columns: repeat(8, 1fr); /* 8x4 for 32 letters */
+      gap: 8px;
+      justify-content: center;
+      margin-top: 2rem;
+      max-width: 650px;
+      margin-left: auto;
+      margin-right: auto;
+    }
+    @media (max-width: 768px) {
+      #grid {
+        grid-template-columns: repeat(6, 1fr);
+      }
+    }
+    @media (max-width: 480px) {
+      #grid {
+        grid-template-columns: repeat(5, 1fr);
+      }
+    }
+    .tile {
+      aspect-ratio: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: clamp(1.2rem, 5vw, 2rem);
+      font-weight: bold;
+      cursor: pointer;
+      border-radius: 10px;
+      user-select: none;
+      transition: all 0.3s ease;
+    }
+    .tile:hover {
+      transform: scale(1.05);
+    }
+    .covered {
+      background: #3a3a3a;
+      color: transparent;
+      box-shadow: 0 0 10px rgba(0,0,0,0.5);
+    }
+    .revealed {
+      background: #1e1e1e;
+      border: 2px solid #4cafef;
+      color: #4cafef;
+      text-shadow: 0 0 10px #4cafef;
+    }
+    #status {
+      margin-top: 1rem;
+      font-size: 1.4rem;
+      min-height: 2em;
+    }
+    #timer {
+      font-size: 1.2rem;
+      margin-top: 0.5rem;
+    }
+    #timer.flash {
+      color: #ff5555;
+      font-weight: bold;
+      animation: flash 1.5s ease;
+    }
+    #penalty {
+      font-size: 1rem;
+      color: #ff5555;
+      margin-top: 0.2rem;
+      min-height: 1.2em;
+    }
+    @keyframes flash {
+      0% { color: #ff5555; }
+      50% { color: #fff; }
+      100% { color: #ff5555; }
+    }
+    .celebrate {
+      animation: celebrate 1s ease forwards;
+      color: #4cafef;
+      text-shadow: 0 0 15px #4cafef, 0 0 25px #00f7ff;
+    }
+    @keyframes celebrate {
+      0% { transform: scale(1); opacity: 0.5; }
+      50% { transform: scale(1.4); opacity: 1; }
+      100% { transform: scale(1); opacity: 1; }
+    }
+    #highscore {
+      margin-top: 1rem;
+      font-size: 1.2rem;
+      opacity: 0.6;
+      transition: opacity 0.3s ease, color 0.3s ease;
+    }
+    #highscore.active {
+      opacity: 1;
+      color: #4cafef;
+      text-shadow: 0 0 10px #4cafef;
+    }
+    #resetBtn {
+      background: none;
+      border: none;
+      color: #bbb;
+      text-decoration: underline;
+      cursor: pointer;
+      font-size: 0.9rem;
+      margin-top: 2rem;
+    }
+    #resetBtn:hover {
+      color: #fff;
+    }
+  </style>
+</head>
+<body>
+  <main class="container">
+    <h1>Gra – Alfabet Polski</h1>
+    <button id="playBtn">Start</button>
+    <div id="status"></div>
+    <div id="grid"></div>
+    <p id="timer"></p>
+    <p id="penalty"></p>
+    <p id="highscore">Najlepszy czas: --:--</p>
+    <button id="resetBtn">Reset rekordu</button>
+  </main>
+
+  <script>
+    const letters = "AĄBCĆDEĘFGHIJKLŁMNŃOÓPRSŚTUWYZŹŻ".split("");
+    const grid = document.getElementById("grid");
+    const statusEl = document.getElementById("status");
+    const timerEl = document.getElementById("timer");
+    const penaltyEl = document.getElementById("penalty");
+    const highscoreEl = document.getElementById("highscore");
+    const playBtn = document.getElementById("playBtn");
+    const resetBtn = document.getElementById("resetBtn");
+
+    let targetLetter = null;
+    let discovered = new Set();
+    let startTime = null;
+    let timerInterval = null;
+    let penaltyTime = 0;
+
+    function formatTime(ms) {
+      const totalSeconds = Math.floor(ms / 1000);
+      const minutes = String(Math.floor(totalSeconds / 60)).padStart(2, "0");
+      const seconds = String(totalSeconds % 60).padStart(2, "0");
+      return `${minutes}:${seconds}`;
+    }
+
+    function updateTimer() {
+      if (!startTime) return;
+      const now = Date.now();
+      const elapsed = now - startTime + penaltyTime;
+      timerEl.textContent = `Czas: ${formatTime(elapsed)}`;
+    }
+
+    function saveHighscore(timeTaken) {
+      try {
+        const stored = localStorage.getItem("plAlphabetHighscore");
+        const highscore = stored ? parseInt(stored, 10) : null;
+
+        if (highscore === null || timeTaken < highscore) {
+          localStorage.setItem("plAlphabetHighscore", timeTaken);
+          highscoreEl.textContent = `🏆 Najlepszy czas: ${formatTime(timeTaken)}`;
+          highscoreEl.classList.add("active", "celebrate");
+          setTimeout(() => highscoreEl.classList.remove("celebrate"), 1500);
+        } else {
+          highscoreEl.textContent = `Najlepszy czas: ${formatTime(highscore)}`;
+          highscoreEl.classList.remove("active");
+        }
+      } catch (e) {
+        console.error("Błąd przy zapisie rekordu:", e);
+        highscoreEl.textContent = "⚠️ Rekord nie mógł zostać zapisany.";
+      }
+    }
+
+    function loadHighscore() {
+      const stored = localStorage.getItem("plAlphabetHighscore");
+      if (stored) {
+        highscoreEl.textContent = `Najlepszy czas: ${formatTime(parseInt(stored, 10))}`;
+      }
+    }
+
+    function resetHighscore() {
+      localStorage.removeItem("plAlphabetHighscore");
+      highscoreEl.textContent = "Najlepszy czas: --:--";
+    }
+
+    function startGame() {
+      grid.innerHTML = "";
+      discovered.clear();
+      penaltyTime = 0;
+      penaltyEl.textContent = "";
+      startTime = Date.now();
+      if (timerInterval) clearInterval(timerInterval);
+      timerInterval = setInterval(updateTimer, 500);
+      letters.forEach(letter => {
+        const div = document.createElement("div");
+        div.className = "tile covered";
+        div.textContent = letter;
+        div.style.setProperty("--cover-color", getRandomColor());
+        div.addEventListener("click", () => handleClick(div, letter));
+        grid.appendChild(div);
+      });
+      nextRound();
+    }
+
+    function nextRound() {
+      const remaining = letters.filter(l => !discovered.has(l));
+      if (remaining.length === 0) {
+        endGame();
+        return;
+      }
+      targetLetter = remaining[Math.floor(Math.random() * remaining.length)];
+      statusEl.textContent = `Znajdź literę: ${targetLetter}`;
+    }
+
+    function handleClick(tile, letter) {
+      if (!targetLetter) return;
+      if (letter === targetLetter) {
+        tile.classList.remove("covered");
+        tile.classList.add("revealed");
+        tile.textContent = letter;
+        discovered.add(letter);
+        nextRound();
+      } else {
+        tile.classList.remove("covered");
+        tile.classList.add("revealed");
+        tile.textContent = letter;
+        statusEl.textContent = `❌ To nie jest ${targetLetter}`;
+        timerEl.classList.add("flash");
+        penaltyTime += 10000; // +10s
+        penaltyEl.textContent = "(+00:10)";
+        setTimeout(() => {
+          tile.classList.remove("revealed");
+          tile.classList.add("covered");
+          tile.textContent = letter;
+          penaltyEl.textContent = "";
+          timerEl.classList.remove("flash");
+          statusEl.textContent = `Znajdź literę: ${targetLetter}`;
+        }, 2000);
+      }
+    }
+
+    function endGame() {
+      clearInterval(timerInterval);
+      const totalTime = Date.now() - startTime + penaltyTime;
+      statusEl.textContent = `🎉 Brawo! Znalazłeś wszystkie litery!`;
+      saveHighscore(totalTime);
+    }
+
+    function getRandomColor() {
+      const colors = ["#4cafef", "#ef6c00", "#8e24aa", "#43a047", "#d32f2f", "#fbc02d"];
+      return colors[Math.floor(Math.random() * colors.length)];
+    }
+
+    playBtn.addEventListener("click", startGame);
+    resetBtn.addEventListener("click", resetHighscore);
+    loadHighscore();
+  </script>
+</body>
+</html>
