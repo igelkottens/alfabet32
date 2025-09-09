@@ -212,10 +212,7 @@
 
     function nextRound() {
       const remaining = letters.filter(l => !discovered.has(l));
-      if (remaining.length === 0) {
-        endGame();
-        return;
-      }
+      if (remaining.length === 0) return; // ✅ no early end here
       targetLetter = remaining[Math.floor(Math.random() * remaining.length)];
       statusEl.textContent = `Znajdź literę: ${targetLetter}`;
     }
@@ -227,7 +224,12 @@
         tile.classList.add("revealed");
         tile.textContent = letter;
         discovered.add(letter);
-        nextRound();
+
+        if (discovered.size === letters.length) {
+          endGame(); // ✅ only ends after last correct click
+        } else {
+          nextRound();
+        }
       } else {
         tile.classList.remove("covered");
         tile.classList.add("revealed");
